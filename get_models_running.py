@@ -2,14 +2,13 @@ import os
 import argparse
 # Change the cache location
 os.environ['TRANSFORMERS_CACHE'] = "/scratch/s4790383/.cache"
-from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, LlavaNextProcessor, LlavaNextForConditionalGeneration
+from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, LlavaNextProcessor, LlavaNextForConditionalGeneration, AutoModelForVision2Seq
 from qwen_vl_utils import process_vision_info
+from transformers.image_utils import load_image
 from datasets import load_dataset
 import pandas
 import torch
-print(torch.cuda.memory_summary())
 torch.cuda.empty_cache()
-print(torch.cuda.memory_summary())
 import base64
 
 
@@ -17,7 +16,7 @@ def create_arg_parser():
     parser = argparse.ArgumentParser()
 
     # GENERAL STUFF
-    parser.add_argument("-l", "--lvlm", type=str, choices=["qwen", "llava", "blip", "all"], default="qwen",
+    parser.add_argument("-l", "--lvlm", type=str, choices=["qwen", "llava", "idefics", "all"], default="qwen",
                         help="Choose which LVLM system to run: Qwen2, LLaVa-1.6, InstructBLIP or all of them")
 
     args = parser.parse_args()
@@ -74,8 +73,6 @@ def run_qwen(messages):
 
 def zero_shot(image, prompt, lvlm):
 
-    #image_input = {}
-
     if lvlm == "qwen":
         image_input = {
                         "type": "image",
@@ -87,15 +84,18 @@ def zero_shot(image, prompt, lvlm):
                         "image_url": {"url": image}
                     }
 
+    elif lvlm == "idefics":
+        image_input = {"type": "image"}
+
+
     messages = [
         {
             "role": "user",
             "content": [
                 image_input,
                 {"type": "text", 
-                    "text": prompt
-                    # "text": "Describe this image."
-                    },
+                 "text": prompt
+                },
             ],
         }
     ]
@@ -128,6 +128,27 @@ def run_llava(prompt_pipe):
     print(processor.decode(output[0], skip_special_tokens=True))
 
 
+def run_idefics(prompt_pipe, image_input):
+    processor = AutoProcessor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
+    model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3",
+                                                   torch_dtype="auto",
+                                                   device_map="auto",
+                                                   low_cpu_mem_usage=True
+                                                   ).to("cuda:0")
+
+    # Convert the prompt pipe to model-friendy input
+    prompt = processor.apply_chat_template(prompt_pipe, add_generation_prompt=True)
+    inputs = processor(text=prompt, images=image_input, return_tensors="pt") # add a list of images if few-shot
+    inputs = {k: v.to("cuda:0") for k, v in inputs.items()}
+    
+    # Generate
+    generated_ids = model.generate(**inputs, max_new_tokens=128)
+    generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+    print(generated_texts)
+    print("Done")
+
+
 def load_data():
 
     # Load the separate splits
@@ -146,14 +167,20 @@ def main():
 
     sample = df_train.sample(n = 1)
     image_bytes = sample.iloc[0, 0]["bytes"]
+
     misinfo_label = sample.iloc[0, 1]
     text_sample = sample.iloc[0, 2]
+    
+    # Fucking with the PIL image
+    image_pil_path = data["train"][sample.index.to_list()[0]]["image"]
+    image_pil = load_image(image_pil_path)
+    print(image_pil)
 
     # Converting the image to base64 for Qwen input (and maybe for LLaVa?)
     image_base64 = base64.b64encode(image_bytes).decode()
     image_input = f"data:image;base64,{image_base64}"
 
-    prompt = f"You are a misinformation detection model. I provide you an image and related to it caption. The entry can be a real snippet from a news article, or an AI-generated entry. Please determine whether the entry is real or fake and elaborate why. Text: {text_sample}"
+    prompt = f"You are a misinformation detection model. I provide you an image and related to it caption. The entry can be a real snippet from a news article, or an AI-generated entry. Determine whether the entry is real or fake. Explain firstly WHY it is fake or real and then write TRUE or FAKE in the end. Text: {text_sample}"
 
     if args.lvlm == "all":
         prompt_pipe = zero_shot(image_input, prompt, "qwen")
@@ -170,6 +197,10 @@ def main():
     elif args.lvlm == "llava":
         prompt_pipe = zero_shot(image_input, prompt, args.lvlm)
         run_llava(prompt_pipe)
+
+    elif args.lvlm == "idefics":
+        prompt_pipe = zero_shot(image_input, prompt, args.lvlm)
+        run_idefics(prompt_pipe, image_pil)
 
     print(f"TRUE LABEL: {misinfo_label}")
 
