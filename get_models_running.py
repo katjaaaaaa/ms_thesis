@@ -9,7 +9,7 @@ from datasets import load_dataset
 import pandas
 import torch
 import sys
-torch.cuda.empty_cache()
+# torch.cuda.empty_cache()
 import base64
 
 
@@ -33,8 +33,10 @@ def load_sample(sample, data, index, is_bytes=False):
     else: misinfo_label = "Fake"
 
     # Prepare the prompt
-    text_sample = sample.iloc[2]
-    prompt = f"You are a misinformation detection model. I provide you an image and related to it caption. The entry can be a real snippet from a news article, or an AI-generated entry. Determine whether the entry is real or fake. Provide firstly the label, REAL or FAKE, and then explain why. Text: {text_sample}"
+    with open("prompt.txt") as f:
+        prompt_base = f.read()
+    text_sample = f"Text: {sample.iloc[2]}"
+    prompt = prompt_base + "\n\n" + text_sample
 
     # Prepare the image in bytes
     if is_bytes:
@@ -49,7 +51,7 @@ def load_sample(sample, data, index, is_bytes=False):
         image_pil_path = data[index]["image"]
         image_input = load_image(image_pil_path)
 
-    return {"data_index" : index + 1, # Restore the entry position based on dataset
+    return {"data_index" : index + 1, # Restore the entry position based on its position in the dataset
             "caption": text_sample, 
             "image": image_input,
             "prompt": prompt, 
@@ -58,21 +60,6 @@ def load_sample(sample, data, index, is_bytes=False):
 
 
 def zero_shot(image, prompt, lvlm):
-
-    if lvlm == "qwen":
-        image_input = {
-                        "type": "image",
-                        "image": image
-                    }
-    elif lvlm == "llava":
-        image_input = {
-                        "type": "image_url",
-                        "image_url": {"url": image}
-                    }
-
-    elif lvlm == "idefics":
-        image_input = {"type": "image"}
-
 
     messages = [
         {
@@ -88,6 +75,7 @@ def zero_shot(image, prompt, lvlm):
 
 
 def few_shot(prompt1, prompt2, prompt3):
+
     messages = [
     {
         "role": "user",
@@ -99,7 +87,7 @@ def few_shot(prompt1, prompt2, prompt3):
     {
         "role": "assistant",
         "content": [
-            {"type": "text", "text": "The entry is FAKE. Neither the woman on the left nor on the right looks like Christopher Dodd's wife, Jackie Clegg. Also, senate discusses the question regarding the actions of the president and the country and does not allow to announce personal matters."},
+            {"type": "text", "text": "{'label': 'FAKE', 'Explanation': 'Neither the woman on the left nor on the right looks like Christopher Dodd's wife, Jackie Clegg. Also, senate discusses the question regarding the actions of the president and the country and does not allow to announce personal matters.'}"},
         ]
     },
     {
@@ -112,7 +100,7 @@ def few_shot(prompt1, prompt2, prompt3):
     {
         "role": "assistant",
         "content": [
-            {"type": "text", "text": "The entry is REAL. A little more than half of California voters ended up supporting Proposition 8, outlawing same-sex marriage in the state. The measure was immediately challenged in court, and in 2013, the U.S. Supreme Court ruled that the defendants in the case had no legal standing, which meant that Proposition 8 was blocked and same-sex marriage could continue. Despite this, a lot of protests started to show. The entry supports the real event, as shown on the image with the anti-same-sex marriage slogans like 'Marriage = Man + Woman'."}]
+            {"type": "text", "text": "{'label': 'REAL', 'Explanation' : 'A little more than half of California voters ended up supporting Proposition 8, outlawing same-sex marriage in the state. The measure was immediately challenged in court, and in 2013, the U.S. Supreme Court ruled that the defendants in the case had no legal standing, which meant that Proposition 8 was blocked and same-sex marriage could continue. Despite this, a lot of protests started to show. The entry supports the real event, as shown on the image with the anti-same-sex marriage slogans like Marriage = Man + Woman.'}"}]
     },
     {
         "role": "user",
@@ -144,99 +132,6 @@ def choose_prompt(args, model, sample1_dict, sample2_dict, input_dict):
     return prompt_pipe, image_input
 
 
-def run_qwen(messages):
-    # default: Load the model on the available device(s)
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
-        "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
-    )
-
-    # We recommend enabling flash_attention_2 for better acceleration and memory saving, especially in multi-image and video scenarios.
-    # model = Qwen2VLForConditionalGeneration.from_pretrained(
-    #     "Qwen/Qwen2-VL-7B-Instruct",
-    #     torch_dtype=torch.bfloat16,
-    #     attn_implementation="flash_attention_2",
-    #     device_map="auto",
-    # )
-
-    # default processer
-    processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
-
-    # The default range for the number of visual tokens per image in the model is 4-16384. You can set min_pixels and max_pixels according to your needs, such as a token count range of 256-1280, to balance speed and memory usage.
-    # min_pixels = 256*28*28
-    # max_pixels = 1280*28*28
-    # processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
-
-    # Preparation for inference
-    text = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
-    image_inputs, video_inputs = process_vision_info(messages)
-    inputs = processor(
-        text=[text],
-        images=image_inputs,
-        videos=video_inputs,
-        padding=True,
-        return_tensors="pt",
-    )
-    inputs = inputs.to("cuda:0")
-
-    # Inference: Generation of the output
-    generated_ids = model.generate(**inputs, max_new_tokens=128)
-    generated_ids_trimmed = [
-        out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-    ]
-    output_text = processor.batch_decode(
-        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    )
-    print(output_text)
-
-
-def run_llava(prompt_pipe):
-    processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-
-    model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf",
-                                                              #torch_dtype=torch.float16, 
-                                                              torch_dtype="auto", 
-                                                              device_map="auto",
-                                                              low_cpu_mem_usage=True,
-                                                              load_in_4bit=True) 
-    model.to("cuda:0")
-
-    inputs = processor.apply_chat_template(prompt_pipe,
-                                           add_generation_prompt=True,
-                                           tokenize=True, 
-                                           return_dict=True,
-                                           return_tensors="pt").to("cuda:0")
-
-    # inputs = processor(images=image, text=prompt, return_tensors="pt").to("cuda:0")
-
-    # autoregressively complete prompt
-    output = model.generate(**inputs, max_new_tokens=100)
-
-    print(processor.decode(output[0], skip_special_tokens=True))
-
-
-def run_idefics(prompt_pipe, image_input):
-    processor = AutoProcessor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
-    model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3",
-                                                   torch_dtype="auto",
-                                                   device_map="auto",
-                                                   low_cpu_mem_usage=True
-                                                   ).to("cuda:0")
-
-    # Convert the prompt pipe to model-friendy input
-    prompt = processor.apply_chat_template(prompt_pipe, add_generation_prompt=True)
-    inputs = processor(text=prompt, images=image_input, return_tensors="pt") # add a list of images if few-shot
-    inputs = {k: v.to("cuda:0") for k, v in inputs.items()}
-    
-    # Generate
-    generated_ids = model.generate(**inputs, max_new_tokens=128)
-    generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
-
-    print(generated_texts)
-    print("Done")
-
-
 def run_lvlm(prompt_pipe, image_input, model):
     match model:
         case "qwen": model_name = "Qwen/Qwen2-VL-7B-Instruct"
@@ -248,7 +143,7 @@ def run_lvlm(prompt_pipe, image_input, model):
     processor = AutoProcessor.from_pretrained(model_name)
     model = AutoModelForVision2Seq.from_pretrained(model_name,
                                                    torch_dtype="auto",
-                                                   device_map="auto",
+                                                   device_map="cuda",
                                                    low_cpu_mem_usage=True
                                                    ).to("cuda:0")
 
@@ -292,23 +187,11 @@ def main():
         for model in model_list:
             prompt_pipe, image_input = choose_prompt(args, model, sample1_dict, sample2_dict, input_dict)
             run_lvlm(prompt_pipe, image_input, model)
+            torch.cuda.empty_cache()
 
     else:
         prompt_pipe, image_input = choose_prompt(args, args.lvlm, sample1_dict, sample2_dict, input_dict)
         run_lvlm(prompt_pipe, image_input, args.lvlm)
-
-    # elif args.lvlm == "qwen":
-    #     prompt_pipe = zero_shot(image_input, prompt, args.lvlm)
-    #     run_qwen(prompt_pipe)
-
-
-    # elif args.lvlm == "llava":
-    #     prompt_pipe = zero_shot(image_input, prompt, args.lvlm)
-    #     run_llava(prompt_pipe)
-
-    # elif args.lvlm == "idefics":
-    #     prompt_pipe = zero_shot(image_input, prompt, args.lvlm)
-    #     run_idefics(prompt_pipe, image_pil)
 
     print(f"TRUE LABEL: {input_dict['label']}")
 
