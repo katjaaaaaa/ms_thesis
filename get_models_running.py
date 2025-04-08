@@ -11,6 +11,9 @@ import torch
 import sys
 # torch.cuda.empty_cache()
 import base64
+import json
+from datetime import datetime
+import re
 
 
 def create_arg_parser():
@@ -21,6 +24,7 @@ def create_arg_parser():
                         help="Choose which LVLM system to run: Qwen2, LLaVa-1.6, InstructBLIP or all of them")
     parser.add_argument("-p", "--prompt", type=str, choices=["zero-shot", "few-shot", "both"], default="one-shot",
                         help="Choose which prompt type to apply: one-shot, few-shot, or both")
+    parser.add_argument("-n", "--n_samples", type=int, default=1, help="Determines the number of randomly taken samples from the training data")
 
     args = parser.parse_args()
     return args
@@ -29,7 +33,7 @@ def create_arg_parser():
 def load_sample(sample, data, index, is_bytes=False):
 
     # Retrieve the label
-    if sample.iloc[1] == 0: misinfo_label = "True"
+    if sample.iloc[1] == 0: misinfo_label = "Real"
     else: misinfo_label = "Fake"
 
     # Prepare the prompt
@@ -59,7 +63,7 @@ def load_sample(sample, data, index, is_bytes=False):
             }
 
 
-def zero_shot(image, prompt, lvlm):
+def zero_shot(image, prompt):
 
     messages = [
         {
@@ -87,7 +91,7 @@ def few_shot(prompt1, prompt2, prompt3):
     {
         "role": "assistant",
         "content": [
-            {"type": "text", "text": "{'label': 'FAKE', 'Explanation': 'Neither the woman on the left nor on the right looks like Christopher Dodd's wife, Jackie Clegg. Also, senate discusses the question regarding the actions of the president and the country and does not allow to announce personal matters.'}"},
+            {"type": "text", "text": "{\"model_label\": \"Fake\", \"model_xplanation\": \"Neither the woman on the left nor on the right looks like Christopher Dodd's wife, Jackie Clegg. Also, senate discusses the question regarding the actions of the president and the country and does not allow to announce personal matters.\"}"},
         ]
     },
     {
@@ -100,7 +104,7 @@ def few_shot(prompt1, prompt2, prompt3):
     {
         "role": "assistant",
         "content": [
-            {"type": "text", "text": "{'label': 'REAL', 'Explanation' : 'A little more than half of California voters ended up supporting Proposition 8, outlawing same-sex marriage in the state. The measure was immediately challenged in court, and in 2013, the U.S. Supreme Court ruled that the defendants in the case had no legal standing, which meant that Proposition 8 was blocked and same-sex marriage could continue. Despite this, a lot of protests started to show. The entry supports the real event, as shown on the image with the anti-same-sex marriage slogans like Marriage = Man + Woman.'}"}]
+            {"type": "text", "text": "{\"model_label\": \"Real\", \"model_explanation\" : \"A little more than half of California voters ended up supporting Proposition 8, outlawing same-sex marriage in the state. The measure was immediately challenged in court, and in 2013, the U.S. Supreme Court ruled that the defendants in the case had no legal standing, which meant that Proposition 8 was blocked and same-sex marriage could continue. Despite this, a lot of protests started to show. The entry supports the real event, as shown on the image with the anti-same-sex marriage slogans like Marriage = Man + Woman.\"}"}]
     },
     {
         "role": "user",
@@ -114,29 +118,49 @@ def few_shot(prompt1, prompt2, prompt3):
     return messages
 
 
-def choose_prompt(args, model, sample1_dict, sample2_dict, input_dict):
-    if args.prompt == "zero-shot":
-        prompt_pipe = zero_shot(input_dict["image"],
-                                input_dict["prompt"],
-                                model)
-        image_input = input_dict["image"]
+def choose_prompt(args, sample1_dict, sample2_dict, input_dict):
 
-    elif args.prompt == "few-shot":
-        prompt_pipe = few_shot(sample1_dict["prompt"],
+    '''
+    Takes few-shot and input entries as dictionaries, converts them to
+    a specific prompt and returns as lists
+    '''
+
+    # Create two types of prompts
+    zeroshot_pipe = zero_shot(input_dict["image"],
+                                input_dict["prompt"])
+
+    fewshot_pipe = few_shot(sample1_dict["prompt"],
                                 sample2_dict["prompt"],
                                 input_dict["prompt"])
-        image_input = [sample1_dict["image"], sample2_dict["image"], input_dict["image"]]
 
-    elif args.prompt == "both": pass # TODO: write the code for both prompt types
+    # Adjust the image input
+    if args.prompt == "zero-shot":
+        prompt_pipe = [zeroshot_pipe]
+        image_input = [input_dict["image"]]
+
+    elif args.prompt == "few-shot":
+        prompt_pipe = [fewshot_pipe]
+        image_input = [[sample1_dict["image"], sample2_dict["image"], input_dict["image"]]]
+
+    elif args.prompt == "both":
+        prompt_pipe = [zeroshot_pipe, fewshot_pipe]
+        image_input = [input_dict["image"], [sample1_dict["image"], sample2_dict["image"], input_dict["image"]]]
+        
 
     return prompt_pipe, image_input
 
 
-def run_lvlm(prompt_pipe, image_input, model):
+def run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time):
     match model:
-        case "qwen": model_name = "Qwen/Qwen2-VL-7B-Instruct"
-        case "llava": model_name = "llava-hf/llava-v1.6-mistral-7b-hf"
-        case "idefics": model_name = "HuggingFaceM4/Idefics3-8B-Llama3"
+        case "qwen":
+            model_name = "Qwen/Qwen2-VL-7B-Instruct"
+            separator = "\nassistant\n"
+        case "llava":
+            model_name = "llava-hf/llava-v1.6-mistral-7b-hf"
+            separator = "[/INST]"
+        case "idefics":
+            model_name = "HuggingFaceM4/Idefics3-8B-Llama3"
+            separator = "\nAssistant:"
         case _: sys.exit("No valid LVLM name provided, aborting the program")
 
     # Initialize the model
@@ -147,16 +171,67 @@ def run_lvlm(prompt_pipe, image_input, model):
                                                    low_cpu_mem_usage=True
                                                    ).to("cuda:0")
 
-    # Prepare the input
-    prompt = processor.apply_chat_template(prompt_pipe, add_generation_prompt=True)
-    inputs = processor(text=prompt, images=image_input, return_tensors="pt")
-    inputs = {k: v.to("cuda:0") for k, v in inputs.items()}
+    # Open an output file if exists
+    try:
+        with open(f"lvlm_output_{date_time}.json") as f:
+            output_dict = json.load(f)
+    except FileNotFoundError:
+        output_dict = dict()
 
-    # Generate the output
-    generated_ids = model.generate(**inputs, max_new_tokens=128)
-    generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+    # Loop through a list of sample dictionaries
+    for input_dict in input_list:
 
-    print(generated_texts)
+        prompt_list, image_list = choose_prompt(args, sample1_dict, sample2_dict, input_dict)
+
+        # Loop through the prompt types
+        for i, prompt_pipe in enumerate(prompt_list):
+
+            # Prepare the input
+            prompt = processor.apply_chat_template(prompt_pipe, add_generation_prompt=True)
+            inputs = processor(text=prompt, images=image_list[i], return_tensors="pt")
+            inputs = {k: v.to("cuda:0") for k, v in inputs.items()}
+        
+            # Generate the output
+            generated_ids = model.generate(**inputs, max_new_tokens=128)
+            generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+    
+            # Store output in a dictionary
+            index_str = str(input_dict["data_index"])
+            output_dict[index_str] = output_dict.get(index_str, dict())
+            output_dict[index_str]["true_label"] = input_dict['label']
+
+            if len(prompt_list) == 1: prompt_type = [args.prompt]
+            else: prompt_type = ["zero-shot", "few-shot"]
+            output_dict[index_str][prompt_type[i]] = output_dict[index_str].get(prompt_type[i], dict())
+            output_dict[index_str][prompt_type[i]][model_name] = extract_output(generated_texts, separator)
+    
+            torch.cuda.empty_cache()
+
+    # Save output as a JSON
+    with open(f"lvlm_output_{date_time}.json", "w") as f:
+        json.dump(output_dict, f, indent=3)
+
+
+def extract_output(text, separator):
+
+    #label = re.findall(r'(<label>(.+?)</label>)', text[0])[1]
+    #explanation = re.findall(r'(<explanation>(.+?)</explanation>)', text[0])[1]
+    #print(f"LABEL: {label}, EXPLANATION: {explanation}")
+
+    output_str = text[0].split(separator)[-1]
+    try:
+        #output_str = output_str.replace("\"model_label\"", "label")
+        #output_str = output_str.replace("model_label", "explanation")
+    
+        output_str = output_str.replace("'model_label'", "\"model_label\"")
+        output_str = output_str.replace("'model_explanation'", "\"model_explanation\"")
+        
+        output_dict = json.loads(output_str)
+        print(output_dict)
+    except json.decoder.JSONDecodeError:
+        output_dict = output_str
+
+    return output_dict
 
 
 def main():
@@ -178,22 +253,28 @@ def main():
     print(sample1_dict)
     sample2_dict = load_sample(df_train.iloc[5003], data, 5003) # True entry
     print(sample2_dict)
-    sample = df_train.sample()
-    input_dict = load_sample(sample.iloc[0], data, sample.index.to_list()[0]) # Random entry TODO ensure it is neither of the above
-    print(input_dict)
+
+    input_list = []
+    samples = df_train.sample(n=args.n_samples, # Sample of N entries from df_train
+                              random_state=2
+                              )
+    for index, row in samples.iterrows():
+        input_list.append(load_sample(row, data, index))
+    print(f"LENGTH LIST: {len(input_list)}, OUTPUT: {input_list}")
+
+    now = datetime.now() # current date and time
+    date_time = now.strftime("%d_%m_%Y_%H%M")
 
     # Create the prompt and run the models
     if args.lvlm == "all":
         for model in model_list:
-            prompt_pipe, image_input = choose_prompt(args, model, sample1_dict, sample2_dict, input_dict)
-            run_lvlm(prompt_pipe, image_input, model)
-            torch.cuda.empty_cache()
+            # prompt_pipe, image_input = choose_prompt(args, model, sample1_dict, sample2_dict, input_list)
+            run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time)
 
     else:
-        prompt_pipe, image_input = choose_prompt(args, args.lvlm, sample1_dict, sample2_dict, input_dict)
-        run_lvlm(prompt_pipe, image_input, args.lvlm)
+        # prompt_pipe, image_input = choose_prompt(args, args.lvlm, sample1_dict, sample2_dict, input_list)
+        run_lvlm(args.lvlm, args, sample1_dict, sample2_dict, input_list, date_time)
 
-    print(f"TRUE LABEL: {input_dict['label']}")
 
 
 if __name__ == "__main__":
