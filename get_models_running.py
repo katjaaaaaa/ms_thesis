@@ -2,6 +2,7 @@ import os
 import argparse
 # Change the cache location
 os.environ['TRANSFORMERS_CACHE'] = "/scratch/s4790383/.cache"
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = "expandable_segments:True"
 from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, LlavaNextProcessor, LlavaNextForConditionalGeneration, AutoModelForVision2Seq
 from qwen_vl_utils import process_vision_info
 from transformers.image_utils import load_image
@@ -25,6 +26,7 @@ def create_arg_parser():
     parser.add_argument("-p", "--prompt", type=str, choices=["zero-shot", "few-shot", "both"], default="one-shot",
                         help="Choose which prompt type to apply: one-shot, few-shot, or both")
     parser.add_argument("-n", "--n_samples", type=int, default=1, help="Determines the number of randomly taken samples from the training data")
+    parser.add_argument("-ds", "--data_split", type=str, default="train", choices=["train","validate","test"], help="Chooses a data split to work with")
 
     args = parser.parse_args()
     return args
@@ -202,10 +204,12 @@ def run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time):
 
             if len(prompt_list) == 1: prompt_type = [args.prompt]
             else: prompt_type = ["zero-shot", "few-shot"]
+
             output_dict[index_str][prompt_type[i]] = output_dict[index_str].get(prompt_type[i], dict())
             output_dict[index_str][prompt_type[i]][model_name] = extract_output(generated_texts, separator)
     
             torch.cuda.empty_cache()
+            print(i)
 
     # Save output as a JSON
     with open(f"lvlm_output_{date_time}.json", "w") as f:
@@ -213,10 +217,6 @@ def run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time):
 
 
 def extract_output(text, separator):
-
-    #label = re.findall(r'(<label>(.+?)</label>)', text[0])[1]
-    #explanation = re.findall(r'(<explanation>(.+?)</explanation>)', text[0])[1]
-    #print(f"LABEL: {label}, EXPLANATION: {explanation}")
 
     output_str = text[0].split(separator)[-1]
     try:
@@ -227,7 +227,7 @@ def extract_output(text, separator):
         output_str = output_str.replace("'model_explanation'", "\"model_explanation\"")
         
         output_dict = json.loads(output_str)
-        print(output_dict)
+        # print(output_dict)
     except json.decoder.JSONDecodeError:
         output_dict = output_str
 
@@ -240,7 +240,7 @@ def main():
 
     # Load the separate data splits
     data = load_dataset("anson-huang/mirage-news", split="train")
-    #valid_data = load_dataset("anson-huang/mirage-news", split="validation")
+    valid_data = load_dataset("anson-huang/mirage-news", split="validation")
     #test_data  = load_dataset("anson-huang/mirage-news", split="test")
 
     #data = load_dataset("anson-huang/mirage-news")
@@ -248,21 +248,32 @@ def main():
     df_train = data.to_pandas()
 
     # Load the dataset entries
-
     sample1_dict = load_sample(df_train.iloc[1], data, 1) # Fake entry
     print(sample1_dict)
     sample2_dict = load_sample(df_train.iloc[5003], data, 5003) # True entry
     print(sample2_dict)
 
     input_list = []
-    samples = df_train.sample(n=args.n_samples, # Sample of N entries from df_train
-                              random_state=2
-                              )
-    for index, row in samples.iterrows():
-        input_list.append(load_sample(row, data, index))
-    print(f"LENGTH LIST: {len(input_list)}, OUTPUT: {input_list}")
 
-    now = datetime.now() # current date and time
+    # Prepare N samples from the train set as input
+    if args.data_split == "train":
+        samples = df_train.sample(n=args.n_samples, # Sample of N entries from df_train
+                                  random_state=2
+                                  )
+        for index, row in samples.iterrows():
+            input_list.append(load_sample(row, data, index))
+
+    # Prepare the whole validation set as input
+    elif args.data_split == "validate":
+
+        for index, row in valid_data.to_pandas().iterrows():
+            input_list.append(load_sample(row, valid_data, index))
+
+    # print(f"LENGTH LIST: {len(input_list)}, OUTPUT: {input_list}")
+    print(f"LENGTH LIST: {len(input_list)}")
+        
+
+    now = datetime.now() # current date and time for the output file name
     date_time = now.strftime("%d_%m_%Y_%H%M")
 
     # Create the prompt and run the models
