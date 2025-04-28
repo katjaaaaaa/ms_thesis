@@ -80,19 +80,57 @@ def zero_shot(image, prompt):
     return messages
 
 
-def few_shot(prompt1, prompt2, prompt3):
+def few_shot(example1, example2, input_prompt):
 
     messages = [
     {
         "role": "user",
         "content": [
             {"type": "image"},
-            {"type": "text", "text": prompt1},
+            {"type": "text", "text": example1},
         ]
     },
     {
         "role": "assistant",
+        "content": [ # 78
+            {"type": "text", "text": "{\"model_label\": \"Fake\", \"model_explanation\" : \"The caption \'hazardous conditions\' is a vague choice of words to represent such a serious alligation towards a big company, implying an attempt to mislead the reader. While there is a Honda plant in Guangzhou, there were no reports confirming any hazards in 2005. The caption includes intentionally harmful towards Honda content, fake. On the image, the workers are wearing orange uniforms, while the official uniform of Honda workers in Guangzhou in 2005 was white. Therefore, as the text caption is AI-generated, the image is AI-generated as well.\"}"}]
+    },
+    {
+        "role": "user",
         "content": [
+            {"type": "image"},
+            {"type": "text", "text": example2},
+        ]
+    },
+    {
+        "role": "assistant",
+        "content": [ # 5065
+            {"type": "text", "text": "{\"model_label\": \"Real\", \"model_explanation\" : \"Both caption and image match a widely discussed political protest in Bangkok that happened in 2010. Based on the quality of the image (realitic lighting, clothing of people, architecture) it matches the quality of a photo made in 2010 in Banghkok. The language of the caption is specific and neutral, which does not aim to mislead the reader by picking sides or adding vague emotional triggers, but to factually explain the event.\"}"}]
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": input_prompt},
+        ]
+    }       
+    ]
+    
+    return messages
+
+
+def few_shot4(example1, example2, example3, example4, input_prompt):
+    messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": example1},
+        ]
+    },
+    {
+        "role": "assistant",
+        "content": [ # 2
             {"type": "text", "text": "{\"model_label\": \"Fake\", \"model_xplanation\": \"Neither the woman on the left nor on the right looks like Christopher Dodd's wife, Jackie Clegg. Also, senate discusses the question regarding the actions of the president and the country and does not allow to announce personal matters.\"}"},
         ]
     },
@@ -100,24 +138,49 @@ def few_shot(prompt1, prompt2, prompt3):
         "role": "user",
         "content": [
             {"type": "image"},
-            {"type": "text", "text": prompt2},
+            {"type": "text", "text": example2},
         ]
     },
     {
         "role": "assistant",
-        "content": [
+        "content": [ # 5004
             {"type": "text", "text": "{\"model_label\": \"Real\", \"model_explanation\" : \"A little more than half of California voters ended up supporting Proposition 8, outlawing same-sex marriage in the state. The measure was immediately challenged in court, and in 2013, the U.S. Supreme Court ruled that the defendants in the case had no legal standing, which meant that Proposition 8 was blocked and same-sex marriage could continue. Despite this, a lot of protests started to show. The entry supports the real event, as shown on the image with the anti-same-sex marriage slogans like Marriage = Man + Woman.\"}"}]
     },
     {
         "role": "user",
         "content": [
             {"type": "image"},
-            {"type": "text", "text": prompt3},
+            {"type": "text", "text": example3},
+        ]
+    },
+    {
+        "role": "assistant",
+        "content": [ # 78
+            {"type": "text", "text": "{\"model_label\": \"Fake\", \"model_explanation\" : \"The caption \'hazardous conditions\' is a vague choice of words to represent such a serious alligation towards a big company, implying an attempt to mislead the reader. While there is a Honda plant in Guangzhou, there were no reports confirming any hazards in 2005. The caption includes intentionally harmful towards Honda content, fake. On the image, the workers are wearing orange uniforms, while the official uniform of Honda workers in Guangzhou in 2005 was white. Therefore, as the text caption is AI-generated, the image is AI-generated as well.\"}"}]
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": example4},
+        ]
+    },
+    {
+        "role": "assistant",
+        "content": [ # 5065
+            {"type": "text", "text": "{\"model_label\": \"Real\", \"model_explanation\" : \"Both caption and image match a widely discussed political protest in Bangkok that happened in 2010. Based on the quality of the image (realitic lighting, clothing of people, architecture) it matches the quality of a photo made in 2010 in Banghkok. The language of the caption is specific and neutral, which does not aim to mislead the reader by picking sides or adding vague emotional triggers, but to factually explain the event.\"}"}]
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": input_prompt},
         ]
     }       
     ]
     
     return messages
+
 
 
 def choose_prompt(args, sample1_dict, sample2_dict, input_dict):
@@ -194,7 +257,7 @@ def run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time):
             inputs = {k: v.to("cuda:0") for k, v in inputs.items()}
         
             # Generate the output
-            generated_ids = model.generate(**inputs, max_new_tokens=128)
+            generated_ids = model.generate(**inputs, max_new_tokens=150)
             generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
     
             # Store output in a dictionary
@@ -248,9 +311,9 @@ def main():
     df_train = data.to_pandas()
 
     # Load the dataset entries
-    sample1_dict = load_sample(df_train.iloc[1], data, 1) # Fake entry
+    sample1_dict = load_sample(df_train.iloc[77], data, 77) # Fake entry [1, 77]
     print(sample1_dict)
-    sample2_dict = load_sample(df_train.iloc[5003], data, 5003) # True entry
+    sample2_dict = load_sample(df_train.iloc[5064], data, 5064) # True entry [5003, 5064]
     print(sample2_dict)
 
     input_list = []
