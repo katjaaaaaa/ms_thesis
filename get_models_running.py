@@ -1,3 +1,6 @@
+# Docs used for examples: 2, 5004, 78, 5065
+
+
 import os
 import argparse
 # Change the cache location
@@ -5,7 +8,7 @@ os.environ['TRANSFORMERS_CACHE'] = "/scratch/s4790383/.cache"
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = "expandable_segments:True"
 from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, LlavaNextProcessor, LlavaNextForConditionalGeneration, AutoModelForVision2Seq
 from qwen_vl_utils import process_vision_info
-from transformers.image_utils import load_image
+from transformers.image_utils import load_image, ImageFeatureExtractionMixin
 from datasets import load_dataset
 import pandas
 import torch
@@ -25,6 +28,8 @@ def create_arg_parser():
                         help="Choose which LVLM system to run: Qwen2, LLaVa-1.6, InstructBLIP or all of them")
     parser.add_argument("-p", "--prompt", type=str, choices=["zero-shot", "few-shot", "both"], default="one-shot",
                         help="Choose which prompt type to apply: one-shot, few-shot, or both")
+    parser.add_argument("-ex", "--examples", type=int, nargs="+", default=[5004, 2],
+                        help="Determines the example entries for the few-shot prompt. Choose from: [5004, 2, 5065, 78]")
     parser.add_argument("-n", "--n_samples", type=int, default=1, help="Determines the number of randomly taken samples from the training data")
     parser.add_argument("-ds", "--data_split", type=str, default="train", choices=["train","validate","test"], help="Chooses a data split to work with")
 
@@ -53,19 +58,20 @@ def load_sample(sample, data, index, is_bytes=False):
 
     # Image as PIL (load via the path)
     else:
-        # image_pil_path = data["train"][sample.index.to_list()[0]]["image"]
         image_pil_path = data[index]["image"]
         image_input = load_image(image_pil_path)
+        processor = ImageFeatureExtractionMixin()
+        image_resized = processor.resize(image=image_input, size=450, default_to_square=False, max_size=600) # if height > width, then image will be rescaled to (size * height / width, size)
 
-    return {"data_index" : index + 1, # Restore the entry position based on its position in the dataset
-            "caption": text_sample, 
-            "image": image_input,
+    return {"data_index" : str(index + 1), # Restore the entry position based on its position in the dataset
+            "caption": sample.iloc[2],
+            "image": image_resized,
             "prompt": prompt, 
             "label": misinfo_label
             }
 
 
-def zero_shot(image, prompt):
+def zero_shot(prompt):
 
     messages = [
         {
@@ -80,110 +86,49 @@ def zero_shot(image, prompt):
     return messages
 
 
-def few_shot(example1, example2, input_prompt):
+def few_shot(fewshot_list, input_prompt):
 
-    messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": example1},
-        ]
-    },
-    {
-        "role": "assistant",
-        "content": [ # 78
-            {"type": "text", "text": "{\"model_label\": \"Fake\", \"model_explanation\" : \"The caption \'hazardous conditions\' is a vague choice of words to represent such a serious alligation towards a big company, implying an attempt to mislead the reader. While there is a Honda plant in Guangzhou, there were no reports confirming any hazards in 2005. The caption includes intentionally harmful towards Honda content, fake. On the image, the workers are wearing orange uniforms, while the official uniform of Honda workers in Guangzhou in 2005 was white. Therefore, as the text caption is AI-generated, the image is AI-generated as well.\"}"}]
-    },
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": example2},
-        ]
-    },
-    {
-        "role": "assistant",
-        "content": [ # 5065
-            {"type": "text", "text": "{\"model_label\": \"Real\", \"model_explanation\" : \"Both caption and image match a widely discussed political protest in Bangkok that happened in 2010. Based on the quality of the image (realitic lighting, clothing of people, architecture) it matches the quality of a photo made in 2010 in Banghkok. The language of the caption is specific and neutral, which does not aim to mislead the reader by picking sides or adding vague emotional triggers, but to factually explain the event.\"}"}]
-    },
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": input_prompt},
-        ]
-    }       
-    ]
-    
+    # Load the prepared few-shot answers TODO: write a check for that
+    with open("answer_pipe.json") as f:
+        answer_dict = json.load(f)
+
+    messages = []
+
+    for entry_dict in fewshot_list:
+        # Build a prompt part of the pipe
+        messages.append(
+          {
+              "role": "user",
+              "content": [
+                  {"type": "image"},
+                  {"type": "text", "text": entry_dict["prompt"]},
+              ]
+          })
+
+        # Build example answer part of the pipe
+        messages.append(
+          {
+              "role": "assistant",
+              "content": [ # 2
+                  {"type": "text", "text": answer_dict[entry_dict["data_index"]]["text"]}
+              ]
+          })
+
+
+    # Lastly, add the input prompt to finish the pipe
+    messages.append(
+          {
+              "role": "user",
+              "content": [
+                  {"type": "image"},
+                  {"type": "text", "text": input_prompt},
+              ]
+          })
+
     return messages
 
 
-def few_shot4(example1, example2, example3, example4, input_prompt):
-    messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": example1},
-        ]
-    },
-    {
-        "role": "assistant",
-        "content": [ # 2
-            {"type": "text", "text": "{\"model_label\": \"Fake\", \"model_xplanation\": \"Neither the woman on the left nor on the right looks like Christopher Dodd's wife, Jackie Clegg. Also, senate discusses the question regarding the actions of the president and the country and does not allow to announce personal matters.\"}"},
-        ]
-    },
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": example2},
-        ]
-    },
-    {
-        "role": "assistant",
-        "content": [ # 5004
-            {"type": "text", "text": "{\"model_label\": \"Real\", \"model_explanation\" : \"A little more than half of California voters ended up supporting Proposition 8, outlawing same-sex marriage in the state. The measure was immediately challenged in court, and in 2013, the U.S. Supreme Court ruled that the defendants in the case had no legal standing, which meant that Proposition 8 was blocked and same-sex marriage could continue. Despite this, a lot of protests started to show. The entry supports the real event, as shown on the image with the anti-same-sex marriage slogans like Marriage = Man + Woman.\"}"}]
-    },
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": example3},
-        ]
-    },
-    {
-        "role": "assistant",
-        "content": [ # 78
-            {"type": "text", "text": "{\"model_label\": \"Fake\", \"model_explanation\" : \"The caption \'hazardous conditions\' is a vague choice of words to represent such a serious alligation towards a big company, implying an attempt to mislead the reader. While there is a Honda plant in Guangzhou, there were no reports confirming any hazards in 2005. The caption includes intentionally harmful towards Honda content, fake. On the image, the workers are wearing orange uniforms, while the official uniform of Honda workers in Guangzhou in 2005 was white. Therefore, as the text caption is AI-generated, the image is AI-generated as well.\"}"}]
-    },
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": example4},
-        ]
-    },
-    {
-        "role": "assistant",
-        "content": [ # 5065
-            {"type": "text", "text": "{\"model_label\": \"Real\", \"model_explanation\" : \"Both caption and image match a widely discussed political protest in Bangkok that happened in 2010. Based on the quality of the image (realitic lighting, clothing of people, architecture) it matches the quality of a photo made in 2010 in Banghkok. The language of the caption is specific and neutral, which does not aim to mislead the reader by picking sides or adding vague emotional triggers, but to factually explain the event.\"}"}]
-    },
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": input_prompt},
-        ]
-    }       
-    ]
-    
-    return messages
-
-
-
-def choose_prompt(args, sample1_dict, sample2_dict, input_dict):
+def choose_prompt(args, fewshot_list, input_dict):
 
     '''
     Takes few-shot and input entries as dictionaries, converts them to
@@ -191,12 +136,10 @@ def choose_prompt(args, sample1_dict, sample2_dict, input_dict):
     '''
 
     # Create two types of prompts
-    zeroshot_pipe = zero_shot(input_dict["image"],
-                                input_dict["prompt"])
+    zeroshot_pipe = zero_shot(input_dict["prompt"])
 
-    fewshot_pipe = few_shot(sample1_dict["prompt"],
-                                sample2_dict["prompt"],
-                                input_dict["prompt"])
+    fewshot_pipe = few_shot(fewshot_list,
+                            input_dict["prompt"])
 
     # Adjust the image input
     if args.prompt == "zero-shot":
@@ -205,17 +148,18 @@ def choose_prompt(args, sample1_dict, sample2_dict, input_dict):
 
     elif args.prompt == "few-shot":
         prompt_pipe = [fewshot_pipe]
-        image_input = [[sample1_dict["image"], sample2_dict["image"], input_dict["image"]]]
+        # image_input = [[sample1_dict["image"], sample2_dict["image"], input_dict["image"]]]
+        image_input = [[sample_dict["image"] for sample_dict in fewshot_list] + [input_dict["image"]]]
 
     elif args.prompt == "both":
         prompt_pipe = [zeroshot_pipe, fewshot_pipe]
-        image_input = [input_dict["image"], [sample1_dict["image"], sample2_dict["image"], input_dict["image"]]]
+        image_input = [input_dict["image"], [sample_dict["image"] for sample_dict in fewshot_list] + [input_dict["image"]]]
         
 
     return prompt_pipe, image_input
 
 
-def run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time):
+def run_lvlm(model, args, fewshot_list, input_list, date_time):
     match model:
         case "qwen":
             model_name = "Qwen/Qwen2-VL-7B-Instruct"
@@ -236,17 +180,18 @@ def run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time):
                                                    low_cpu_mem_usage=True
                                                    ).to("cuda:0")
 
-    # Open an output file if exists
-    try:
-        with open(f"lvlm_output_{date_time}.json") as f:
-            output_dict = json.load(f)
-    except FileNotFoundError:
-        output_dict = dict()
-
     # Loop through a list of sample dictionaries
     for input_dict in input_list:
 
-        prompt_list, image_list = choose_prompt(args, sample1_dict, sample2_dict, input_dict)
+        '''CHECK IF OPENING FILE HERE WORKS WITH MULTIPLE SBATCH JOBS (if they don't overwrite each other)'''
+        # Open an output file if exists 
+        try:
+            with open(f"lvlm_output_{date_time}.json") as f:
+                output_dict = json.load(f)
+        except FileNotFoundError:
+            output_dict = dict()
+
+        prompt_list, image_list = choose_prompt(args, fewshot_list, input_dict)
 
         # Loop through the prompt types
         for i, prompt_pipe in enumerate(prompt_list):
@@ -257,12 +202,13 @@ def run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time):
             inputs = {k: v.to("cuda:0") for k, v in inputs.items()}
         
             # Generate the output
-            generated_ids = model.generate(**inputs, max_new_tokens=150)
+            generated_ids = model.generate(**inputs, max_new_tokens=180)
             generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
     
             # Store output in a dictionary
-            index_str = str(input_dict["data_index"])
+            index_str =input_dict["data_index"]
             output_dict[index_str] = output_dict.get(index_str, dict())
+            output_dict[index_str]["caption"] = input_dict['caption']
             output_dict[index_str]["true_label"] = input_dict['label']
 
             if len(prompt_list) == 1: prompt_type = [args.prompt]
@@ -270,13 +216,12 @@ def run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time):
 
             output_dict[index_str][prompt_type[i]] = output_dict[index_str].get(prompt_type[i], dict())
             output_dict[index_str][prompt_type[i]][model_name] = extract_output(generated_texts, separator)
-    
-            torch.cuda.empty_cache()
-            print(i)
 
-    # Save output as a JSON
-    with open(f"lvlm_output_{date_time}.json", "w") as f:
-        json.dump(output_dict, f, indent=3)
+            torch.cuda.empty_cache()
+
+        # Save output as a JSON
+        with open(f"lvlm_output_{date_time}.json", "w") as f:
+            json.dump(output_dict, f, indent=3)
 
 
 def extract_output(text, separator):
@@ -310,31 +255,28 @@ def main():
     #df_train = data["train"].to_pandas()
     df_train = data.to_pandas()
 
-    # Load the dataset entries
-    sample1_dict = load_sample(df_train.iloc[77], data, 77) # Fake entry [1, 77]
-    print(sample1_dict)
-    sample2_dict = load_sample(df_train.iloc[5064], data, 5064) # True entry [5003, 5064]
-    print(sample2_dict)
+    # Insert the list of indexes of the few-shot examples TODO: add an argument for that
+    #example_index_list = [2, 5004, 78, 5065] # Example order in the prompt: Fake - True - Fake - True
+    example_index_list = args.examples
+    fewshot_list = [load_sample(df_train.iloc[i - 1], data, i - 1) for i in example_index_list]
 
     input_list = []
 
     # Prepare N samples from the train set as input
     if args.data_split == "train":
         samples = df_train.sample(n=args.n_samples, # Sample of N entries from df_train
-                                  random_state=2
-                                  )
+                                  random_state=2)
         for index, row in samples.iterrows():
             input_list.append(load_sample(row, data, index))
 
     # Prepare the whole validation set as input
     elif args.data_split == "validate":
-
         for index, row in valid_data.to_pandas().iterrows():
             input_list.append(load_sample(row, valid_data, index))
 
-    # print(f"LENGTH LIST: {len(input_list)}, OUTPUT: {input_list}")
-    print(f"LENGTH LIST: {len(input_list)}")
-        
+    # print(f"INPUT LENGTH LIST: {len(input_list)}, OUTPUT: {input_list}")
+    print(f"INPUT LENGTH LIST: {len(input_list)}")
+    print(f"FEWSHOT LENGTH LIST: {len(fewshot_list)}, OUTPUT: {fewshot_list}")
 
     now = datetime.now() # current date and time for the output file name
     date_time = now.strftime("%d_%m_%Y_%H%M")
@@ -342,13 +284,12 @@ def main():
     # Create the prompt and run the models
     if args.lvlm == "all":
         for model in model_list:
-            # prompt_pipe, image_input = choose_prompt(args, model, sample1_dict, sample2_dict, input_list)
-            run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time)
+            # run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time)
+            run_lvlm(model, args, fewshot_list, input_list, date_time)
 
     else:
-        # prompt_pipe, image_input = choose_prompt(args, args.lvlm, sample1_dict, sample2_dict, input_list)
-        run_lvlm(args.lvlm, args, sample1_dict, sample2_dict, input_list, date_time)
-
+        # run_lvlm(args.lvlm, args, sample1_dict, sample2_dict, input_list, date_time)
+        run_lvlm(args.lvlm, args, fewshot_list, input_list, date_time)
 
 
 if __name__ == "__main__":
