@@ -27,24 +27,27 @@ def create_arg_parser():
     parser.add_argument("-l", "--lvlm", type=str, choices=["qwen", "llava", "idefics", "all"], default="qwen",
                         help="Choose which LVLM system to run: Qwen2, LLaVa-1.6, InstructBLIP or all of them")
     parser.add_argument("-p", "--prompt", type=str, choices=["zero-shot", "few-shot", "both"], default="one-shot",
-                        help="Choose which prompt type to apply: one-shot, few-shot, or both")
+                        help="Choose which prompt type to apply: zero-shot, few-shot, or both")
+    parser.add_argument("-pf", "--prompt_file", type=str, default="prompt01", help="Inserd desired prompt file (Must be .txt)")
     parser.add_argument("-ex", "--examples", type=int, nargs="+", default=[5004, 2],
                         help="Determines the example entries for the few-shot prompt. Choose from: [5004, 2, 5065, 78]")
     parser.add_argument("-n", "--n_samples", type=int, default=1, help="Determines the number of randomly taken samples from the training data")
     parser.add_argument("-ds", "--data_split", type=str, default="train", choices=["train","validate","test"], help="Chooses a data split to work with")
+    parser.add_argument("-ap", "--answer_pipe", type=str, default="answer_pipe", help="Assign the answer pipe used in the few-shot prompt (Must be .json)")
+    parser.add_argument("-plo", "--prompt_label_only", type=bool, default=False, help="Decide whether apply the 'label only' prompt")
 
     args = parser.parse_args()
     return args
 
 
-def load_sample(sample, data, index, is_bytes=False):
+def load_sample(args, sample, data, index, promptfile, is_bytes=False):
 
     # Retrieve the label
-    if sample.iloc[1] == 0: misinfo_label = "Real"
-    else: misinfo_label = "Fake"
+    if sample.iloc[1] == 0: misinfo_label = 0
+    else: misinfo_label = 1
 
     # Prepare the prompt
-    with open("prompt.txt") as f:
+    with open(f"{promptfile}.txt") as f:
         prompt_base = f.read()
     text_sample = f"Text: {sample.iloc[2]}"
     prompt = prompt_base + "\n\n" + text_sample
@@ -86,10 +89,10 @@ def zero_shot(prompt):
     return messages
 
 
-def few_shot(fewshot_list, input_prompt):
+def few_shot(args, fewshot_list, input_prompt):
 
     # Load the prepared few-shot answers TODO: write a check for that
-    with open("answer_pipe.json") as f:
+    with open(f"{args.answer_pipe}.json") as f:
         answer_dict = json.load(f)
 
     messages = []
@@ -138,7 +141,7 @@ def choose_prompt(args, fewshot_list, input_dict):
     # Create two types of prompts
     zeroshot_pipe = zero_shot(input_dict["prompt"])
 
-    fewshot_pipe = few_shot(fewshot_list,
+    fewshot_pipe = few_shot(args, fewshot_list,
                             input_dict["prompt"])
 
     # Adjust the image input
@@ -183,13 +186,17 @@ def run_lvlm(model, args, fewshot_list, input_list, date_time):
     # Loop through a list of sample dictionaries
     for input_dict in input_list:
 
-        '''CHECK IF OPENING FILE HERE WORKS WITH MULTIPLE SBATCH JOBS (if they don't overwrite each other)'''
         # Open an output file if exists 
         try:
-            with open(f"lvlm_output_{date_time}.json") as f:
+            with open(f"{args.prompt}_{date_time}.json") as f:
                 output_dict = json.load(f)
         except FileNotFoundError:
             output_dict = dict()
+            output_dict["args"] = output_dict.get("args", dict())
+            # { for key, value in vars(args).items() if value}
+            for key, value in vars(args).items():
+                if value:
+                    output_dict["args"][key] = value
 
         prompt_list, image_list = choose_prompt(args, fewshot_list, input_dict)
 
@@ -202,7 +209,10 @@ def run_lvlm(model, args, fewshot_list, input_list, date_time):
             inputs = {k: v.to("cuda:0") for k, v in inputs.items()}
         
             # Generate the output
-            generated_ids = model.generate(**inputs, max_new_tokens=180)
+            generated_ids = model.generate(**inputs,
+                                           max_new_tokens=180,
+                                           temperature=0.01, # 0.01 is the built-in temperature for qwen2
+                                           do_sample=True)
             generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
     
             # Store output in a dictionary
@@ -220,7 +230,7 @@ def run_lvlm(model, args, fewshot_list, input_list, date_time):
             torch.cuda.empty_cache()
 
         # Save output as a JSON
-        with open(f"lvlm_output_{date_time}.json", "w") as f:
+        with open(f"{args.prompt}_{date_time}.json", "w") as f:
             json.dump(output_dict, f, indent=3)
 
 
@@ -233,9 +243,16 @@ def extract_output(text, separator):
     
         output_str = output_str.replace("'model_label'", "\"model_label\"")
         output_str = output_str.replace("'model_explanation'", "\"model_explanation\"")
+
+        #match = re.search(r'"model_explanation"\s*:\s*"(.+?)"\s*(?:,|\})', output_str).group(1)
+        #corrected = match.replace("\"", "'")
+
+        #output_str = re.sub(r'"model_explanation"\s*:\s*"(.+?)"\s*(?:,|\})',
+                            #f'"model_explanation": "{corrected}"', output_str)
+        
         
         output_dict = json.loads(output_str)
-        # print(output_dict)
+
     except json.decoder.JSONDecodeError:
         output_dict = output_str
 
@@ -258,7 +275,14 @@ def main():
     # Insert the list of indexes of the few-shot examples TODO: add an argument for that
     #example_index_list = [2, 5004, 78, 5065] # Example order in the prompt: Fake - True - Fake - True
     example_index_list = args.examples
-    fewshot_list = [load_sample(df_train.iloc[i - 1], data, i - 1) for i in example_index_list]
+
+    # TODO: CHANGE THE WITH OPEN() FROM ARGS TO A VAR AND DETERMINE IT WITH A ARGS BOOLEAN
+    promptfile = args.prompt_file
+    promptfile_nolabel = "prompt01_labelonly"
+    if args.prompt_label_only:
+        fewshot_list = [load_sample(args, df_train.iloc[i - 1], data, i - 1, promptfile_nolabel) for i in example_index_list]
+    else:
+        fewshot_list = [load_sample(args, df_train.iloc[i - 1], data, i - 1, promptfile) for i in example_index_list]
 
     input_list = []
 
@@ -267,29 +291,30 @@ def main():
         samples = df_train.sample(n=args.n_samples, # Sample of N entries from df_train
                                   random_state=2)
         for index, row in samples.iterrows():
-            input_list.append(load_sample(row, data, index))
+            input_list.append(load_sample(args, row, data, index, promptfile))
 
     # Prepare the whole validation set as input
     elif args.data_split == "validate":
         for index, row in valid_data.to_pandas().iterrows():
-            input_list.append(load_sample(row, valid_data, index))
+            input_list.append(load_sample(args, row, valid_data, index, promptfile))
 
     # print(f"INPUT LENGTH LIST: {len(input_list)}, OUTPUT: {input_list}")
     print(f"INPUT LENGTH LIST: {len(input_list)}")
     print(f"FEWSHOT LENGTH LIST: {len(fewshot_list)}, OUTPUT: {fewshot_list}")
 
     now = datetime.now() # current date and time for the output file name
-    date_time = now.strftime("%d_%m_%Y_%H%M")
+    date_time = now.strftime("%H%M%S_%d_%m_%Y")
+    i_date_time = "_".join([str(i) for i in example_index_list]) + f"_{date_time}"
 
     # Create the prompt and run the models
     if args.lvlm == "all":
         for model in model_list:
             # run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time)
-            run_lvlm(model, args, fewshot_list, input_list, date_time)
+            run_lvlm(model, args, fewshot_list, input_list, i_date_time)
 
     else:
         # run_lvlm(args.lvlm, args, sample1_dict, sample2_dict, input_list, date_time)
-        run_lvlm(args.lvlm, args, fewshot_list, input_list, date_time)
+        run_lvlm(args.lvlm, args, fewshot_list, input_list, i_date_time)
 
 
 if __name__ == "__main__":
