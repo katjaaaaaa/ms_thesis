@@ -238,23 +238,30 @@ def extract_output(text, separator):
 
     output_str = text[0].split(separator)[-1]
     try:
-        #output_str = output_str.replace("\"model_label\"", "label")
-        #output_str = output_str.replace("model_label", "explanation")
-    
         output_str = output_str.replace("'model_label'", "\"model_label\"")
         output_str = output_str.replace("'model_explanation'", "\"model_explanation\"")
 
-        #match = re.search(r'"model_explanation"\s*:\s*"(.+?)"\s*(?:,|\})', output_str).group(1)
-        #corrected = match.replace("\"", "'")
-
-        #output_str = re.sub(r'"model_explanation"\s*:\s*"(.+?)"\s*(?:,|\})',
-                            #f'"model_explanation": "{corrected}"', output_str)
-        
-        
         output_dict = json.loads(output_str)
 
     except json.decoder.JSONDecodeError:
-        output_dict = output_str
+        # Attempt to rebuild the broken string output 
+        pattern = r'{\s*"model_label"\s*:\s*(\d+)\s*,\s*"model_explanation"\s*:\s*"((?:[^"\\]|\\.|")*?)"[^\w]*}'
+        # pattern = r'\s*{\s*"model_label"\s*:\s*(\d+).*?"model_explanation":\s*"(.*?)".*?\s*}\s*'
+
+        match = re.search(pattern, output_str)
+        if match:
+            print(output_str)
+            model_label = int(match.group(1))
+            model_explanation = match.group(2)
+            result = {
+                "model_label": model_label,
+                "model_explanation": model_explanation
+            }
+            print(json.dumps(result, indent=2))
+            output_dict = result
+        else:
+            # Store the whole string in the output
+            output_dict = output_str
 
     return output_dict
 
@@ -289,7 +296,7 @@ def main():
     # Prepare N samples from the train set as input
     if args.data_split == "train":
         samples = df_train.sample(n=args.n_samples, # Sample of N entries from df_train
-                                  random_state=2)
+                                  random_state=1)
         for index, row in samples.iterrows():
             input_list.append(load_sample(args, row, data, index, promptfile))
 
@@ -305,6 +312,9 @@ def main():
     now = datetime.now() # current date and time for the output file name
     date_time = now.strftime("%H%M%S_%d_%m_%Y")
     i_date_time = "_".join([str(i) for i in example_index_list]) + f"_{date_time}"
+
+    if args.prompt_label_only:
+        i_date_time += "_plo"
 
     # Create the prompt and run the models
     if args.lvlm == "all":
