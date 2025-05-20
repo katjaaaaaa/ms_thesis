@@ -40,7 +40,7 @@ def create_arg_parser():
     return args
 
 
-def load_sample(args, sample, data, index, promptfile, is_bytes=False):
+def load_sample(args, sample, data, index, promptfile, is_bytes=False, test_split=None):
 
     # Retrieve the label
     if sample.iloc[1] == 0: misinfo_label = 0
@@ -66,12 +66,22 @@ def load_sample(args, sample, data, index, promptfile, is_bytes=False):
         processor = ImageFeatureExtractionMixin()
         image_resized = processor.resize(image=image_input, size=450, default_to_square=False, max_size=600) # if height > width, then image will be rescaled to (size * height / width, size)
 
-    return {"data_index" : str(index + 1), # Restore the entry position based on its position in the dataset
-            "caption": sample.iloc[2],
-            "image": image_resized,
-            "prompt": prompt, 
-            "label": misinfo_label
-            }
+    if test_split == None:
+        return {"data_index" : str(index + 1), # Restore the entry position based on its position in the dataset
+                "caption": sample.iloc[2],
+                "image": image_resized,
+                "prompt": prompt, 
+                "label": misinfo_label
+                }
+    # Test split case
+    else:
+        index = str(index + 1) + "_" + test_split
+        return {"data_index" : index, # Add the name of the test subset to create a unique index
+                "caption": sample.iloc[2],
+                "image": image_resized,
+                "prompt": prompt, 
+                "label": misinfo_label
+                }
 
 
 def zero_shot(prompt):
@@ -305,8 +315,16 @@ def main():
         for index, row in valid_data.to_pandas().iterrows():
             input_list.append(load_sample(args, row, valid_data, index, promptfile))
 
+    # Combine all test subsets into one and prepare for input
+    elif args.data_split == "test":
+        for i, f in enumerate(["test1_nyt_mj", "test2_bbc_dalle", "test3_cnn_dalle", "test4_bbc_sdxl", "test5_cnn_sdxl"]):
+            data  = load_dataset("anson-huang/mirage-news", split=f)
+            for index, row in data.to_pandas().iterrows():
+                input_list.append(load_sample(args, row, valid_data, index, promptfile, False, f))
+
     # print(f"INPUT LENGTH LIST: {len(input_list)}, OUTPUT: {input_list}")
     print(f"INPUT LENGTH LIST: {len(input_list)}")
+    # print(f"EXAMPLE INPUT LIST: {input_list[1068]}")
     print(f"FEWSHOT LENGTH LIST: {len(fewshot_list)}, OUTPUT: {fewshot_list}")
 
     now = datetime.now() # current date and time for the output file name
