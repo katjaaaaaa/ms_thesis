@@ -17,7 +17,6 @@ from rouge_score import rouge_scorer
 import sys
 from copy import deepcopy
 from sklearn.metrics import confusion_matrix
-from negspacy.negation import Negex
 
 
 def create_arg_parser():
@@ -48,18 +47,21 @@ def nested_dict():
 
 def text_preprocess(s, nlp):
     '''Takes a string of text, removes punctuation, 
-    lowercases the rest and returns as a list of strings'''
+    lowercases the rest and returns as a new strings'''
     s = s.lower()
     s = re.sub(r"[^\w\s]", "", s, flags=re.UNICODE)
-    s_new = []
 
-    stopwords = nlp.Defaults.stop_words
+    # UNCOMMENT TO USE BLEU AND ROUGE-L W/O STOP-WORDS
 
-    for token in s.split():
-        if token not in stopwords:
-            s_new.append(token)
+    # s_new = []
+    # stopwords = nlp.Defaults.stop_words
 
-    return " ".join(s)
+    # for token in s.split():
+    #     if token not in stopwords:
+    #         s_new.append(token)
+
+    # return " ".join(s)
+    return s
 
 
 def calculate_negation(data_dict, nlp):
@@ -70,9 +72,8 @@ def calculate_negation(data_dict, nlp):
     saves them in the data dictionary, then returns it
     '''
 
-    # nlp.add_pipe("negex")
-
-    neg_mean = []
+    neg_words = {"never", "no", "nothing", "nowhere", "noone", "none"}
+    neg_avg = []
 
     for _, data in data_dict.items():
         for k in ("zero-shot", "few-shot"):
@@ -84,13 +85,13 @@ def calculate_negation(data_dict, nlp):
                     model_answer = answers["model_explanation"]
                     doc = nlp(model_answer)
                     for token in doc:
-                        if token.dep_ == "neg":
+                        if token.dep_ == "neg" or token in neg_words:
                             neg_counter += 1
-                    neg_avg = neg_counter / len(doc)
-                    answers["avg_negation"] = neg_avg
-                    neg_mean.append(neg_avg)
+                    neg_avg_doc = neg_counter / len(doc)
+                    answers["avg_negation"] = neg_avg_doc
+                    neg_avg.append(neg_avg_doc)
 
-    print(f"NEG AVERAGE: {np.mean(neg_mean)}")
+    print(f"NEG AVERAGE: {np.mean(neg_avg)}")
 
     return data_dict
 
@@ -227,8 +228,10 @@ def count_faulty_output(args, out_dict):
     error_dict = nested_dict() # Dict for storing the errors in output and classification
     f1_dict = nested_dict() # Dict for storing classification results
 
-    f1_best = 0
+    f1_best = nested_dict()
+    f1_best_all = 0
     model_best = None
+    # model_best_all = nested_dict()
 
     error_counter = dict()
     for filename, data_dict in out_dict.items():
@@ -304,11 +307,14 @@ def count_faulty_output(args, out_dict):
                                                report["macro avg"]["support"]
                                                ]
 
+                f1_best[model] = f1_best.get(model, [0, ""])
                 # Search for the highest f1-score
-                if report["macro avg"]["f1-score"] > f1_best:
-                    f1_best = report["macro avg"]["f1-score"]
-                    model_best = { filename : { model : f1_dict[filename][k][model]}}
-
+                if report["macro avg"]["f1-score"] > f1_best[model][0]:
+                    if f1_best_all < report["macro avg"]["f1-score"]:
+                        f1_best_all = report["macro avg"]["f1-score"]
+                        model_best = { filename : { model : f1_dict[filename][k][model]}}
+                    # Search for the model best
+                    f1_best[model] = [report["macro avg"]["f1-score"], filename]
 
                 # Print the results
                 print(f" MODEL: {model}")
@@ -332,9 +338,14 @@ def count_faulty_output(args, out_dict):
     with open(f"./test/best_scores.json", "w") as f:
         json.dump(best_dict, f, indent=2)
 
-    # Print best results
+    # Print best results per model
+    for model, data in f1_best.items():
+        print(f"MODEL {model} ({data[1]}) HIGHEST F1: {data[0]}")
+
+    # Print best results per prompt type
     print("----------------------------")
     print(f"BEST RESULTS: {model_best}")
+    print()
 
     return out_dict
 
