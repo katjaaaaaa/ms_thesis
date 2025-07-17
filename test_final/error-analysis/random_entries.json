@@ -1,0 +1,152 @@
+{
+  "true_negative": {
+    "test5_cnn_sdxl": {
+      "185": {
+        "caption": "The US Coast Guard has banned the use of all electronics on commercial boats, citing safety concerns over lithium-ion batteries.",
+        "true_label": 1,
+        "model_label": 1,
+        "model_explanation": "The image depicts a boat with electronic equipment, which contradicts the news snippet stating that the US Coast Guard has banned the use of all electronics on commercial boats. This discrepancy suggests that the image is AI-generated."
+      },
+      "134": {
+        "caption": "Moody's scandal forces Ford into bankruptcy.",
+        "true_label": 1,
+        "model_label": 1,
+        "model_explanation": "The image depicts a Ford truck on a city street, which is not related to the text about Moody's scandal and Ford's bankruptcy. The text and image are not consistent with each other, indicating that the entry is fake."
+      }
+    },
+    "test3_cnn_dalle": {
+      "202": {
+        "caption": "Israel illegally smuggles tin ingots from England.",
+        "true_label": 1,
+        "model_label": 1,
+        "model_explanation": "The image shows a metal ingot with text that reads 'ISRAEL ILLEGALLY SLIGGLES N GTN 1 INGOTS FROM ENGLAND.' This suggests a fictional scenario involving Israel and England, which is not a real event. The text is not consistent with real-world events or news reports."
+      },
+      "22": {
+        "caption": "Hurricane Dorian manufactured by climate control experiment.",
+        "true_label": 1,
+        "model_label": 1,
+        "model_explanation": "The image depicts a hurricane with a globe in the background and a climate control experiment in the foreground. This suggests a connection between climate control and hurricanes, which is a real-world phenomenon. However, the caption 'Hurricane Dorian manufactured by climate control experiment' is misleading as it implies that the hurricane was created by a climate control experiment, which is not a real-world event. Therefore, the entry is fake."
+      },
+      "126": {
+        "caption": "Americans reject health insurance due to government control.",
+        "true_label": 1,
+        "model_label": 1,
+        "model_explanation": "The image depicts a group of people in front of a building, which is not a real news outlet. The caption suggests a political stance against government control of health insurance, which is a real-world issue. However, the image does not provide any context or location that would indicate a real news outlet. Therefore, the entry is fake."
+      }
+    }
+  },
+  "false_positive": {
+    "test1_nyt_mj": {
+      "34": {
+        "caption": "Rescue workers staged a search for survivors in the alleged rubble of the Federal Investigation Agency which was reportedly hit by a suicide bomb blast in Lahore on Monday.",
+        "true_label": 1,
+        "model_label": 0,
+        "model_explanation": "The image depicts a rescue operation in a disaster area, which is consistent with the caption describing a search for survivors after a bomb blast. The scene is chaotic with debris and emergency personnel, which aligns with the description of a rescue effort following a bombing incident."
+      },
+      "25": {
+        "caption": "To exploit Haiti\u2019s long-term needs, former Presidents Bill Clinton and George W. Bush met Monday with President Ren\u00e9 Pr\u00e9val on the grounds of the toppled National Palace in Port-au-Prince.",
+        "true_label": 1,
+        "model_label": 0,
+        "model_explanation": "The image shows two men walking outdoors with a scenic background, but it does not provide any context or information about the event described in the caption. The caption mentions former Presidents Bill Clinton and George W. Bush meeting with President Ren\u00e9 Pr\u00e9val in Port-au-Prince, which is a specific event that did not occur in the image."
+      }
+    },
+    "test3_cnn_dalle": {
+      "228": {
+        "caption": "Oil prices surge due to instability in the Middle East.",
+        "true_label": 1,
+        "model_label": 0,
+        "model_explanation": "The image shows a pumpjack and a cityscape with stock market numbers, which is not directly related to the news snippet about oil prices. The snippet is about the surge in oil prices due to instability in the Middle East, which is a real-world event. The image does not depict this event or its cause."
+      },
+      "10": {
+        "caption": "Florida faces imminent destruction from Hurricane Dorian.",
+        "true_label": 1,
+        "model_label": 0,
+        "model_explanation": "The image shows a scene that appears to be from a hurricane-affected area, with debris and a dark, stormy sky. However, the caption mentions Hurricane Dorian, which was a significant hurricane that hit the Bahamas in 2019. The image does not provide any specific information about the location or the event, and it is not clear if the scene depicted is related to Hurricane Dorian or another hurricane. Therefore, the image and caption are not consistent with each other, and the entry is likely fake."
+      },
+      "229": {
+        "caption": "Manchester United faces financial crisis.",
+        "true_label": 1,
+        "model_label": 0,
+        "model_explanation": "The image shows a piggy bank with the Manchester United flag, which is not a real news outlet. The caption mentions Manchester United facing a financial crisis, which is a real news event. However, the image does not provide any information about the financial crisis and is not related to the news event."
+      }
+    }
+  },
+  "false_negative": {
+    "test3_cnn_dalle": {
+      "449": {
+        "caption": "Hordes of dragonflies are showing up on weather radar and making things interesting for weather forecasters in the Eastern United States.",
+        "true_label": 0,
+        "model_label": 1,
+        "model_explanation": "The image shows weather radar images, which are typically used to track precipitation and other weather phenomena. The caption mentions dragonflies, which are not typically associated with weather radar images. Additionally, the radar images appear to be of high quality and detail, which is unusual for AI-generated images. Therefore, it is likely that both the image and caption are AI-generated."
+      },
+      "405": {
+        "caption": "Thomas Cook plane forced to divert because pilot spilled coffee",
+        "true_label": 0,
+        "model_label": 1,
+        "model_explanation": "The text mentions a Thomas Cook plane, which is a real airline, but the event described is highly unlikely and humorous. Thomas Cook Airlines is known for its leisure flights, and the scenario of a pilot spilling coffee is not a typical or credible event that would lead to a plane being forced to divert. Therefore, the event is likely AI-generated."
+      }
+    },
+    "test4_bbc_sdxl": {
+      "290": {
+        "caption": "The secondary ticketing site has improved its communication with customers, the competition watchdog said.",
+        "true_label": 0,
+        "model_label": 1,
+        "model_explanation": "The image depicts a concert scene with a crowd and stage lights, which is not related to the text about a secondary ticketing site and customer communication. The text and image are not connected, indicating that the entry is fake."
+      },
+      "300": {
+        "caption": "Michael Burns, 21, punched his father in the face and ribs in a row over money at their home.",
+        "true_label": 0,
+        "model_label": 1,
+        "model_explanation": "The image shows a man holding an umbrella, which does not correlate with the caption about a man punching his father. The caption describes a violent incident, while the image does not depict any violence or the individuals involved."
+      }
+    },
+    "test1_nyt_mj": {
+      "349": {
+        "caption": "Uighur women shopped in a market in Khotan, in China\u2019s western region of Xinjiang. Riots involving the Uighur and Han ethnic groups killed nearly 200 people in the region in 2009.",
+        "true_label": 0,
+        "model_label": 1,
+        "model_explanation": "The image depicts a market scene with women shopping, which is consistent with the caption's description of a market in Khotan, Xinjiang. However, the caption mentions a riot involving the Uighur and Han ethnic groups in 2009, which is not depicted in the image. The image does not show any signs of conflict or violence, and the caption's mention of a riot is not supported by the visual content of the image."
+      }
+    }
+  },
+  "true_positive": {
+    "test3_cnn_dalle": {
+      "476": {
+        "caption": "An Oklahoma man died after saving his 3-year-old granddaughter when their home exploded. CNN affiliate KFOR has the story.",
+        "true_label": 0,
+        "model_label": 0,
+        "model_explanation": "The image shows a man and a child, but there is no indication that the man is the same individual who saved his granddaughter from an explosion. The caption mentions an Oklahoma man and a 3-year-old granddaughter, but these details are not present in the image. Therefore, the image and caption are not consistent with each other, and the entry is real."
+      }
+    },
+    "test2_bbc_dalle": {
+      "488": {
+        "caption": "Defending champions New Zealand run in nine tries to thrash Canada 63-0 and record their second convincing win at the World Cup.",
+        "true_label": 0,
+        "model_label": 0,
+        "model_explanation": "The image shows a rugby player in a black jersey with the Adidas logo and the New Zealand national emblem, which is consistent with the description of New Zealand's rugby team. The caption mentions the New Zealand team winning the World Cup, which is a factual event. Therefore, the image and caption are from a real news outlet."
+      },
+      "413": {
+        "caption": "The plan, which was branded a \"snooper's charter\" by opponents, was originally due to be introduced three years ago.",
+        "true_label": 0,
+        "model_label": 0,
+        "model_explanation": "The text refers to a plan that was originally due to be introduced three years ago, which suggests that the event is historical and not current. The image, however, shows a breaking news banner with the BBC logo, indicating that the news is current and not historical. Therefore, the image and caption are not consistent with each other, and the entry is fake."
+      }
+    },
+    "test4_bbc_sdxl": {
+      "257": {
+        "caption": "Almost 595,000 people came to the London museum to see its celebration of the French fashion house.",
+        "true_label": 0,
+        "model_label": 0,
+        "model_explanation": "The image shows a fashion exhibition with mannequins dressed in elegant gowns, which is consistent with the description of a fashion house celebration. However, the caption mentions a museum in London, which is not directly related to the image content. The caption also includes a specific number of visitors, which is not provided in the image. Therefore, the caption is likely manipulated and the image is AI-generated."
+      }
+    },
+    "test5_cnn_sdxl": {
+      "304": {
+        "caption": "Lost in much of the one-dimensional coverage of Mattis' book is what is actually in it, writes Peter Bergen. It's true that Mattis implies sharp criticism of Trump, but he also registers strong disagreement with George W. Bush, Barack Obama and Joe Biden, who\u2026",
+        "true_label": 0,
+        "model_label": 0,
+        "model_explanation": "The image is of a man with a serious expression, but there is no caption provided to indicate the context or subject matter. The caption refers to a book by Mattis, which suggests a real news outlet, but the image itself does not provide any information to confirm this. Therefore, the image is real, but the caption is not."
+      }
+    }
+  }
+}

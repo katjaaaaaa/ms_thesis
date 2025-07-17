@@ -1,0 +1,7 @@
+order,model,precision_0,recall_0,precision_1,recall_1,f1,exceed_error
+false-true,Idefics3-8B-Llama3,0.72,0.61,0.68,0.74,0.66,59.5
+false-true,Qwen2-VL-7B-Instruct,0.88,0.53,0.67,0.92,0.71,168.83
+false-true,llava-v1.6-mistral-7b-hf,0.76,0.43,0.61,0.86,0.63,276.33
+true-false,Idefics3-8B-Llama3,0.75,0.7,0.73,0.75,0.72,52.0
+true-false,Qwen2-VL-7B-Instruct,0.87,0.65,0.73,0.89,0.77,230.17
+true-false,llava-v1.6-mistral-7b-hf,0.75,0.55,0.66,0.82,0.67,282.5
