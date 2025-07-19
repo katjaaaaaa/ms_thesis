@@ -1,19 +1,20 @@
-# Docs used for examples: 2, 5004, 78, 5065
-
+# Filename: get_models_running.py
+# Date: 19/07/2025
+# Author: Katja Kamyshanova
+# This program loads a HuggingFace dataset MiRAGeNews, pre-made prompt and few-shot explanations as input and 
+# uses it to runs an experiment with three Visual Language Models, namely Qwen2-VL, LLaVA-1.6 and Idefics3
+# Each experiment can be configured with the argument parser
 
 import os
 import argparse
 # Change the cache location
-os.environ['TRANSFORMERS_CACHE'] = "/scratch/s4790383/.cache"
+os.environ['TRANSFORMERS_CACHE'] = "/scratch/s4790383/.cache" # Used instead of HF_HOME as HF_HOME did not work
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = "expandable_segments:True"
-from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, LlavaNextProcessor, LlavaNextForConditionalGeneration, AutoModelForVision2Seq
-from qwen_vl_utils import process_vision_info
+from transformers import AutoProcessor, AutoModelForVision2Seq
 from transformers.image_utils import load_image, ImageFeatureExtractionMixin
 from datasets import load_dataset
-import pandas
 import torch
 import sys
-# torch.cuda.empty_cache()
 import base64
 import json
 from datetime import datetime
@@ -23,14 +24,13 @@ import re
 def create_arg_parser():
     parser = argparse.ArgumentParser()
 
-    # GENERAL STUFF
     parser.add_argument("-l", "--lvlm", type=str, choices=["qwen", "llava", "idefics", "all"], default="qwen",
                         help="Choose which LVLM system to run: Qwen2, LLaVa-1.6, InstructBLIP or all of them")
     parser.add_argument("-p", "--prompt", type=str, choices=["zero-shot", "few-shot", "both"], default="one-shot",
                         help="Choose which prompt type to apply: zero-shot, few-shot, or both")
     parser.add_argument("-pf", "--prompt_file", type=str, default="prompt01", help="Inserd desired prompt file (Must be .txt)")
     parser.add_argument("-ex", "--examples", type=int, nargs="+", default=[5004, 2],
-                        help="Determines the example entries for the few-shot prompt. Choose from: [5004, 2, 5065, 78]")
+                        help="Determines the example entries for the few-shot prompt. Choose from: [5004, 2, 5065, 78, 7879, 154]")
     parser.add_argument("-n", "--n_samples", type=int, default=1, help="Determines the number of randomly taken samples from the training data")
     parser.add_argument("-ds", "--data_split", type=str, default="train", choices=["train","validate","test"], help="Chooses a data split to work with")
     parser.add_argument("-ap", "--answer_pipe", type=str, default="answer_pipe", help="Assign the answer pipe used in the few-shot prompt (Must be .json)")
@@ -41,6 +41,12 @@ def create_arg_parser():
 
 
 def load_sample(args, sample, data, index, promptfile, is_bytes=False, test_split=None):
+
+    '''
+    Takes a sample from the dataset, loads the image and the caption,
+    inserts the caption into the input prompt, then returns the extracted
+    sample data as a dictionary
+    '''
 
     # Retrieve the label
     if sample.iloc[1] == 0: misinfo_label = 0
@@ -73,6 +79,7 @@ def load_sample(args, sample, data, index, promptfile, is_bytes=False, test_spli
                 "prompt": prompt, 
                 "label": misinfo_label
                 }
+
     # Test split case
     else:
         index = str(index + 1) + "_" + test_split
@@ -173,6 +180,14 @@ def choose_prompt(args, fewshot_list, input_dict):
 
 
 def run_lvlm(model, args, fewshot_list, input_list, date_time):
+
+    '''
+    Takes the VLM name, list of few-shot examples and input,
+    prepares the prompt based on the type of experiment
+    (zero-shot/few-shot PLO/few-shot PLE) and examples, then runs the VLM
+    on the input and stores the generated output in a JSON file
+    '''
+
     match model:
         case "qwen":
             model_name = "Qwen/Qwen2-VL-7B-Instruct"
@@ -193,17 +208,21 @@ def run_lvlm(model, args, fewshot_list, input_list, date_time):
                                                    low_cpu_mem_usage=True
                                                    ).to("cuda:0")
 
+    # Define writing path
+    write_path = f"{args.prompt}_{date_time}.json"
+    if args.data_split == "test":
+        write_path = f"./test_final/{args.prompt}_{date_time}.json"
+
     # Loop through a list of sample dictionaries
     for input_dict in input_list:
 
         # Open an output file if exists 
         try:
-            with open(f"{args.prompt}_{date_time}.json") as f:
+            with open(write_path) as f:
                 output_dict = json.load(f)
         except FileNotFoundError:
             output_dict = dict()
             output_dict["args"] = output_dict.get("args", dict())
-            # { for key, value in vars(args).items() if value}
             for key, value in vars(args).items():
                 if value:
                     output_dict["args"][key] = value
@@ -240,11 +259,17 @@ def run_lvlm(model, args, fewshot_list, input_list, date_time):
             torch.cuda.empty_cache()
 
         # Save output as a JSON
-        with open(f"{args.prompt}_{date_time}.json", "w") as f:
+        with open(write_path, "w") as f:
             json.dump(output_dict, f, indent=3)
 
 
 def extract_output(text, separator):
+
+    '''
+    Takes a string, attempts to convert it to JSON,
+    then returns a converted dictionary, or the
+    same string if conversion failed
+    '''
 
     output_str = text[0].split(separator)[-1]
     try:
@@ -256,7 +281,6 @@ def extract_output(text, separator):
     except json.decoder.JSONDecodeError:
         # Attempt to rebuild the broken string output 
         pattern = r'{\s*"model_label"\s*:\s*(\d+)\s*,\s*"model_explanation"\s*:\s*"((?:[^"\\]|\\.|")*?)"[^\w]*}'
-        # pattern = r'\s*{\s*"model_label"\s*:\s*(\d+).*?"model_explanation":\s*"(.*?)".*?\s*}\s*'
 
         match = re.search(pattern, output_str)
         if match:
@@ -277,25 +301,19 @@ def extract_output(text, separator):
 
 
 def main():
-    args = create_arg_parser() # TODO: write a check of the arguments
+    args = create_arg_parser()
     model_list = ["qwen", "llava", "idefics"]
 
     # Load the separate data splits
     data = load_dataset("anson-huang/mirage-news", split="train")
-    valid_data = load_dataset("anson-huang/mirage-news", split="validation")
-    #test_data  = load_dataset("anson-huang/mirage-news", split="test")
-
-    #data = load_dataset("anson-huang/mirage-news")
-    #df_train = data["train"].to_pandas()
     df_train = data.to_pandas()
+    valid_data = load_dataset("anson-huang/mirage-news", split="validation")
 
-    # Insert the list of indexes of the few-shot examples TODO: add an argument for that
-    #example_index_list = [2, 5004, 78, 5065] # Example order in the prompt: Fake - True - Fake - True
+    # Load the few-shot example IDs and prompt file names
     example_index_list = args.examples
-
-    # TODO: CHANGE THE WITH OPEN() FROM ARGS TO A VAR AND DETERMINE IT WITH A ARGS BOOLEAN
     promptfile = args.prompt_file
     promptfile_nolabel = "prompt01_labelonly"
+
     if args.prompt_label_only:
         fewshot_list = [load_sample(args, df_train.iloc[i - 1], data, i - 1, promptfile_nolabel) for i in example_index_list]
     else:
@@ -317,31 +335,28 @@ def main():
 
     # Combine all test subsets into one and prepare for input
     elif args.data_split == "test":
-        for i, f in enumerate(["test1_nyt_mj", "test2_bbc_dalle", "test3_cnn_dalle", "test4_bbc_sdxl", "test5_cnn_sdxl"]):
-            data  = load_dataset("anson-huang/mirage-news", split=f)
-            for index, row in data.to_pandas().iterrows():
-                input_list.append(load_sample(args, row, valid_data, index, promptfile, False, f))
+        for f in ["test1_nyt_mj", "test2_bbc_dalle", "test3_cnn_dalle", "test4_bbc_sdxl", "test5_cnn_sdxl"]:
+            test_data  = load_dataset("anson-huang/mirage-news", split=f)
+            for index, row in test_data.to_pandas().iterrows():
+                input_list.append(load_sample(args, row, test_data, index, promptfile, False, f))
 
-    # print(f"INPUT LENGTH LIST: {len(input_list)}, OUTPUT: {input_list}")
     print(f"INPUT LENGTH LIST: {len(input_list)}")
-    # print(f"EXAMPLE INPUT LIST: {input_list[1068]}")
     print(f"FEWSHOT LENGTH LIST: {len(fewshot_list)}, OUTPUT: {fewshot_list}")
 
+    # Create the output filename
     now = datetime.now() # current date and time for the output file name
     date_time = now.strftime("%H%M%S_%d_%m_%Y")
     i_date_time = "_".join([str(i) for i in example_index_list]) + f"_{date_time}"
-
     if args.prompt_label_only:
         i_date_time += "_plo"
+    i_date_time += f"_{args.data_split}"
 
-    # Create the prompt and run the models
+    # Run the experiment with all models
     if args.lvlm == "all":
         for model in model_list:
-            # run_lvlm(model, args, sample1_dict, sample2_dict, input_list, date_time)
             run_lvlm(model, args, fewshot_list, input_list, i_date_time)
-
+    # Run the experiment with one specified model
     else:
-        # run_lvlm(args.lvlm, args, sample1_dict, sample2_dict, input_list, date_time)
         run_lvlm(args.lvlm, args, fewshot_list, input_list, i_date_time)
 
 
