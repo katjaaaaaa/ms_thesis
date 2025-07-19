@@ -53,7 +53,7 @@ def load_sample(args, sample, data, index, promptfile, is_bytes=False, test_spli
     else: misinfo_label = 1
 
     # Prepare the prompt
-    with open(f"{promptfile}.txt") as f:
+    with open(f"./prompt/{promptfile}.txt") as f:
         prompt_base = f.read()
     text_sample = f"Text: {sample.iloc[2]}"
     prompt = prompt_base + "\n\n" + text_sample
@@ -108,8 +108,8 @@ def zero_shot(prompt):
 
 def few_shot(args, fewshot_list, input_prompt):
 
-    # Load the prepared few-shot answers TODO: write a check for that
-    with open(f"{args.answer_pipe}.json") as f:
+    # Load the prepared few-shot answers
+    with open(f"./pre-made_answers/{args.answer_pipe}.json") as f:
         answer_dict = json.load(f)
 
     messages = []
@@ -168,7 +168,6 @@ def choose_prompt(args, fewshot_list, input_dict):
 
     elif args.prompt == "few-shot":
         prompt_pipe = [fewshot_pipe]
-        # image_input = [[sample1_dict["image"], sample2_dict["image"], input_dict["image"]]]
         image_input = [[sample_dict["image"] for sample_dict in fewshot_list] + [input_dict["image"]]]
 
     elif args.prompt == "both":
