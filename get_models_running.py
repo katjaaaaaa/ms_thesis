@@ -26,7 +26,7 @@ def create_arg_parser():
 
     parser.add_argument("-l", "--lvlm", type=str, choices=["qwen", "llava", "idefics", "all"], default="qwen",
                         help="Choose which LVLM system to run: Qwen2, LLaVa-1.6, InstructBLIP or all of them")
-    parser.add_argument("-p", "--prompt", type=str, choices=["zero-shot", "few-shot", "both"], default="one-shot",
+    parser.add_argument("-p", "--prompt", type=str, choices=["zero-shot", "few-shot", "both"], default="both",
                         help="Choose which prompt type to apply: zero-shot, few-shot, or both")
     parser.add_argument("-pf", "--prompt_file", type=str, default="prompt01", help="Inserd desired prompt file (Must be .txt)")
     parser.add_argument("-ex", "--examples", type=int, nargs="+", default=[5004, 2],
