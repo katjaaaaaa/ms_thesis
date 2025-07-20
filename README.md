@@ -19,7 +19,7 @@ The winning experiment that was analysed in the thesis (Qwen2-VL six-shot PLO) i
 
 ## Running the experiments
 
-We ran our experiment in a Python 3.11.13 virtual environment. Before running the programs, install the necessary packages with this command:
+We ran our experiments in a Python 3.11.13 virtual environment. Before running the programs, install the necessary packages with this command:
 
 ```
 pip install -r requirements.txt
