@@ -1,7 +1,7 @@
 prompt_setting,model,precision_0,recall_0,precision_1,recall_1,f1,exceed_error
-expl,Idefics3-8B-Llama3,0.78,0.5,0.64,0.86,0.67,80.67
-expl,Qwen2-VL-7B-Instruct,0.91,0.48,0.65,0.95,0.7,398.0
-expl,llava-v1.6-mistral-7b-hf,0.75,0.61,0.68,0.8,0.7,21.33
-plo,Idefics3-8B-Llama3,0.69,0.81,0.77,0.63,0.72,30.83
-plo,Qwen2-VL-7B-Instruct,0.84,0.7,0.75,0.87,0.78,1.0
-plo,llava-v1.6-mistral-7b-hf,0.76,0.37,0.6,0.88,0.6,537.5
+PLE,Idefics3-8B-Llama3,0.78,0.5,0.64,0.86,0.67,80.67
+PLE,Qwen2-VL-7B-Instruct,0.91,0.48,0.65,0.95,0.7,398.0
+PLE,llava-v1.6-mistral-7b-hf,0.75,0.61,0.68,0.8,0.7,21.33
+PLO,Idefics3-8B-Llama3,0.69,0.81,0.77,0.63,0.72,30.83
+PLO,Qwen2-VL-7B-Instruct,0.84,0.7,0.75,0.87,0.78,1.0
+PLO,llava-v1.6-mistral-7b-hf,0.76,0.37,0.6,0.88,0.6,537.5
