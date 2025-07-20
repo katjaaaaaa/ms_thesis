@@ -31,7 +31,7 @@ We used Qwen2-VL, LLaVA-1.6, and Idefics3 to generate the misinformation label a
 ```
 python3 get_models_running.py -p both -ds train -n 50 -l idefics
 ```
-The following command can be used to generate the output on the test split for the experiment containing the winning misinformation detector, Qwen2-VL: 
+Use the following command to generate the output on the test split for the experiment containing the winning misinformation detector, Qwen2-VL: 
 
 ```
 python3 get_models_running.py -l all -p few-shot -ex 5065 154 7879 2 5004 78 -ds test -ap answer_pipe_labelonly -plo True
@@ -61,13 +61,13 @@ python3 postprocess_output.py -of ./test_final/six-shot/few-shot_5065_154_7879_2
 ```
 2. Transfer the output to the `./concreteness/data/` directory or use the data that we utilized in our experiment, which is already stored in the data directory
 3. Extract the regression model stored in `model.zip` (We received this model file by training it in the notebook provided by Charbonnier and Wartena (2019). [Link to the notebook](https://colab.research.google.com/drive/14341vvHfrEX1W-JTUlUKKNatfkI8aH_W?usp=sharing))
-4. Run the notebook
+4. Run the `calculate_concreteness.ipynb` notebook
 > Note: We ran the concreteness and specificity notebooks using the Google Colab environment and stored all the data on the Google Drive. If you prefer to run the notebook elsewhere, consider changing the `HEAD_DIR` variable to a different path
 
 > Note 2: The Charbonnier and Wartena (2019) notebook requires specific versions of `numpy` and `gensim`. If you are working with Google Colab and have installed the packages, it may request that you restart the environment to apply the changes to the packages. Some already installed packages may not support the dependency with the older versions of numpy. However, it does not have any effect on the packages necessary to run the notebook
 
 ### 4. Calculate the specificity
-Similarly to concreteness, the specificity code is placed separately for the overall clarity of the code. The output of the concreteness code is required to calculate further specificity. 
+Similarly to concreteness, the specificity code is placed separately for the overall clarity of the code. The output of the concreteness code is required to calculate the specificity scores. 
 1. Transfer the concreteness output files to `./specificity/data/` directory or use the data that we utilized in our experiment, which is already stored in the data directory
-2. Run the notebook
+2. Run the `calculate_specificity.ipynb` notebook
 
