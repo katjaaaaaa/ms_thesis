@@ -12,7 +12,7 @@ This directory contains the output from all 37 experiments and the further analy
 |F|154 7879 |154 5004 78 5065|154 7879 2 5004 78 5065|
 
 Further, this directory contains the output of the post-process analyses made in `postprocess_output.py`: 
-- `best-model-final` includes the output of the input similarity, negation, and the input made for the concreteness notebook.
-- `error-analysis` contains the output of the classification analyses (grouped results by example order & by prompt setting), input similarity results, and 20 randomly chosen entries used in the qualitative analysis.
+- `best-model-final` includes the output of the list of metric scores necessary to calculate the input similarity and negation, and the input made for the concreteness notebook.
+- `error-analysis` contains the averaged output of the classification analyses (grouped results by example order & by prompt setting), input similarity results, and 20 randomly chosen entries used in the qualitative analysis.
 
 Lastly, the `to-merge` directory contains model outputs that could not be completed in a single run and, therefore, required multiple runs followed by merging. The final merged results are included in the designated few-shot directories, while the contents of `to-merge` are retained for administrative reference.
