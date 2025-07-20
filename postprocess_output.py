@@ -39,12 +39,12 @@ def create_arg_parser():
     parser.add_argument("-t", "--test", action="store_true", help="Prepare the provided output file for test analysis")
     parser.add_argument("-tm", "--test_model", type=str, choices=["Qwen", "llava", "Idefics"], help="Provide the model necessary for the test analysis")
 
-    # Types of analysises
-    parser.add_argument("-r", "--render_check", action="store_true",help="Indicate whether the output json must be checked on the subject of the answer finished rendering")
-    parser.add_argument("-c", "--concreteness", action="store_true", help="Calculates the concreteness level per output")
-    parser.add_argument("-n", "--negation", action="store_true", help="Calculates the average amount of negation used per output")
-    parser.add_argument("-s", "--similarity", action="store_true", help="Calculates the BLEU and BERTscores of the model output")
-    parser.add_argument("-sw", "--stop_words", action="store_true", help="Define whether remove stop-words during calculation of text similarity")
+    # Types of analyses
+    parser.add_argument("-r", "--render_check", action="store_true",help="Runs the analysis of the classification results")
+    parser.add_argument("-c", "--concreteness", action="store_true", help="Finds the words with the requested POS tags to create the input for the concreteness analysis")
+    parser.add_argument("-n", "--negation", action="store_true", help="Calculates the average amount of negation used per model output")
+    parser.add_argument("-s", "--similarity", action="store_true", help="Calculates the SBLEU, ROUGE-L and BertScore between the model output and input")
+    parser.add_argument("-sw", "--stop_words", action="store_true", help="Defines whether to remove stop-words during calculation of text similarity")
 
     # Arguments for additional functions
     parser.add_argument("-ml", "--mean_length", action="store_true", help="Calculates the mean length of the generated explanation per requested model output")
