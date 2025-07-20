@@ -26,7 +26,7 @@ pip install -r requirements.txt
 ```
 ### 1. Generate the VLM output
 
-We used Qwen2-VL, LLaVA-1.6, and Idefics3 to generate the misinformation label and explanations for the multi-modal input. The code allows for adjusting the settings of experiments, choosing between the data splits (train/validate/test), the models, number of examples, types of prompts (zero-shot/few-shot/both), settings (PLO/PLE), etc. For instance, the current command runs only Idefics3 with both zero-shot and few-shot PLE prompts, default examples (#5004 and #2), default pre-made answers file (`answer_pipe.json`) on 50 entries chosen randomly from the training data split:
+We used Qwen2-VL, LLaVA-1.6, and Idefics3 to generate the misinformation label and explanations for the multi-modal input. The code allows for adjusting the settings of experiments using input arguments, including the choice between data splits (train/validate/test), models, the number of examples, and types of prompts (zero-shot/few-shot/both), as well as settings (PLO/PLE), etc. For instance, the current command runs only Idefics3 with both zero-shot and few-shot PLE prompts, default examples (#5004 and #2), default pre-made answers file (`answer_pipe.json`) on 50 entries chosen randomly from the training data split:
 
 ```
 python3 get_models_running.py -p both -ds train -n 50 -l idefics
